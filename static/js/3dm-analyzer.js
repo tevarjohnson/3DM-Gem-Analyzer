@@ -36,19 +36,27 @@ async function init() {
 
     // Get viewer container dimensions
     const container = document.getElementById('viewer')
-    const containerWidth = container.clientWidth
-    const containerHeight = container.clientHeight
+    const rect = container.getBoundingClientRect()
+    const width = rect.width
+    const height = rect.height
 
     // Setup camera
-    camera = new THREE.PerspectiveCamera(65, containerWidth / containerHeight, 0.1, 1000)
+    camera = new THREE.PerspectiveCamera(65, width / height, 0.1, 1000)
     camera.position.set(10, 10, 10)
 
-    // Setup renderer
-    renderer = new THREE.WebGLRenderer({ antialias: true })
-    renderer.setPixelRatio(window.devicePixelRatio)
-    renderer.setSize(containerWidth, containerHeight)
+    // Setup renderer with proper pixel ratio
+    renderer = new THREE.WebGLRenderer({ 
+        antialias: true,
+        powerPreference: "high-performance"
+    })
+    renderer.setPixelRatio(1) // Force 1:1 pixel ratio for consistent behavior
+    renderer.setSize(width, height)
     renderer.shadowMap.enabled = true
     container.appendChild(renderer.domElement)
+
+    // Make sure canvas fills container
+    renderer.domElement.style.width = '100%'
+    renderer.domElement.style.height = '100%'
 
     // Setup controls
     controls = new OrbitControls(camera, renderer.domElement)
@@ -67,7 +75,7 @@ async function init() {
 
     // Handle file input and object selection
     document.getElementById('fileInput').addEventListener('change', handleFileSelect)
-    window.addEventListener('click', onMouseClick, false)
+    renderer.domElement.addEventListener('click', onMouseClick, false)
 
     animate()
 }
@@ -254,58 +262,19 @@ function createSummaryPanel(object) {
             console.log('Found diamond mesh:', child.name);
             diamondCount++;
             
-            const positions = child.geometry.attributes.position.array;
-            let minX = Infinity, maxX = -Infinity;
-            let minY = Infinity, maxY = -Infinity;
-            let minZ = Infinity, maxZ = -Infinity;
+            const dimensions = calculateObjectDimensions(child)
             
-            for (let i = 0; i < positions.length; i += 3) {
-                const vertex = new THREE.Vector3(
-                    positions[i],
-                    positions[i + 1],
-                    positions[i + 2]
-                ).applyMatrix4(child.matrixWorld);
-                minX = Math.min(minX, vertex.x);
-                maxX = Math.max(maxX, vertex.x);
-                minY = Math.min(minY, vertex.y);
-                maxY = Math.max(maxY, vertex.y);
-                minZ = Math.min(minZ, vertex.z);
-                maxZ = Math.max(maxZ, vertex.z);
-            }
-        
-            let sizeX, sizeY, sizeZ, shape, key;
-            sizeZ = roundToTenth(maxZ - minZ);
-            const lowerName = child.name.toLowerCase();
-        
-            if (lowerName.includes('emerald')) {
-                const rawWidth = maxX - minX;
-                const rawHeight = maxY - minY;
-                sizeX = roundToTenth(Math.max(rawWidth, rawHeight));
-                sizeY = roundToTenth(Math.min(rawWidth, rawHeight));
-                shape = child.name;
-                key = `${sizeX} x ${sizeY}`;
-            } else if (lowerName.includes('round')) {
-                const diameter = roundToTenth(Math.max(maxX - minX, maxY - minY));
-                sizeX = sizeY = diameter;
-                shape = child.name;
-                key = `${diameter} x ${diameter}`;
-            } else {
-                sizeX = roundToTenth(maxX - minX);
-                sizeY = roundToTenth(maxY - minY);
-                shape = child.name;
-                key = `${sizeX} x ${sizeY}`;
-            }
-        
+            let key = `${dimensions.sizeX} x ${dimensions.sizeY}`
             if (!diamonds.has(key)) {
                 diamonds.set(key, {
                     count: 0,
-                    sizeX,
-                    sizeY,
-                    sizeZ,
-                    shape
+                    sizeX: dimensions.sizeX,
+                    sizeY: dimensions.sizeY,
+                    sizeZ: dimensions.sizeZ,
+                    shape: child.name
                 });
             }
-            diamonds.get(key).count++;
+            diamonds.get(key).count++
         }
     });
 
@@ -370,155 +339,200 @@ function createSummaryPanel(object) {
     console.log('Summary panel created successfully');
 }
 
-function onMouseClick(event) {
-    mouse.x = (event.clientX / window.innerWidth) * 2 - 1
-    mouse.y = -(event.clientY / window.innerHeight) * 2 + 1
+// Calculate dimensions for an object based on its geometry and type
+function calculateObjectDimensions(object) {
+    const positions = object.geometry.attributes.position.array
+    let minX = Infinity, minY = Infinity, minZ = Infinity
+    let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity
 
-    raycaster.setFromCamera(mouse, camera)
-
-    // Get all meshes in the scene
-    const meshes = []
-    scene.traverse((child) => {
-        if (child.isMesh) {
-            // Reset material
-            child.material = defaultMaterial.clone()
-            if (child.userData.attributes?.drawColor) {
-                const color = child.userData.attributes.drawColor
-                child.material.color.setRGB(
-                    color.r / 255,
-                    color.g / 255,
-                    color.b / 255
-                )
-            }
-            meshes.push(child)
-        }
-    })
-
-    const intersects = raycaster.intersectObjects(meshes, true)
-
-    // Remove existing info container
-    let container = document.getElementById('container')
-    if (container) container.remove()
-
-    if (intersects.length > 0) {
-        const object = intersects[0].object
+    // Calculate bounds from vertices
+    for (let i = 0; i < positions.length; i += 3) {
+        const vertex = new THREE.Vector3(positions[i], positions[i + 1], positions[i + 2])
+        // Apply object's transformation
+        vertex.applyMatrix4(object.matrixWorld)
         
-        // Highlight selected object
-        object.material = selectedMaterial.clone()
+        minX = Math.min(minX, vertex.x)
+        minY = Math.min(minY, vertex.y)
+        minZ = Math.min(minZ, vertex.z)
+        maxX = Math.max(maxX, vertex.x)
+        maxY = Math.max(maxY, vertex.y)
+        maxZ = Math.max(maxZ, vertex.z)
+    }
 
-        // Create info container
-        container = document.createElement('div')
-        container.id = 'container'
-        container.style.position = 'absolute'
-        container.style.top = '10px'
-        container.style.right = '10px'
-        container.style.backgroundColor = 'rgba(0, 0, 0, 0.8)'
-        container.style.color = 'white'
-        container.style.padding = '10px'
-        container.style.borderRadius = '5px'
-        container.style.maxWidth = '300px'
+    // Calculate raw dimensions
+    const sizeX = Math.abs(maxX - minX).toFixed(2)
+    const sizeY = Math.abs(maxY - minY).toFixed(2)
+    const sizeZ = Math.abs(maxZ - minZ).toFixed(2)
+    
+    let displaySizeX = sizeX
+    let displaySizeY = sizeY
+    
+    // Adjust dimensions based on object type
+    const lowerName = object.name.toLowerCase()
+    if (lowerName.includes('round')) {
+        const diameter = Math.max(parseFloat(sizeX), parseFloat(sizeY)).toFixed(2)
+        displaySizeX = displaySizeY = diameter
+    } else if (lowerName.includes('emerald')) {
+        const rawWidth = parseFloat(sizeX)
+        const rawHeight = parseFloat(sizeY)
+        displaySizeX = Math.max(rawWidth, rawHeight).toFixed(2)
+        displaySizeY = Math.min(rawWidth, rawHeight).toFixed(2)
+    }
 
-        let html = '<h3>Object Information</h3>'
-
-        // Add name if available
-        if (object.name) {
-            html += `<p><strong>Name:</strong> ${object.name}</p>`
-        }
-
-        // Add geometry measurements
-        if (object.geometry) {
-            html += '<h4>Geometry Measurements</h4>'
-            
-            const vertexCount = object.geometry.attributes.position.count
-            const triangleCount = object.geometry.index ? 
-                object.geometry.index.count / 3 : 
-                object.geometry.attributes.position.count / 3
-
-            // Get the geometry vertices
-            const positions = object.geometry.attributes.position.array
-            let minX = Infinity, minY = Infinity, minZ = Infinity
-            let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity
-
-            // Calculate bounds from vertices
-            for (let i = 0; i < positions.length; i += 3) {
-                const vertex = new THREE.Vector3(positions[i], positions[i + 1], positions[i + 2])
-                // Apply object's transformation
-                vertex.applyMatrix4(object.matrixWorld)
-                
-                minX = Math.min(minX, vertex.x)
-                minY = Math.min(minY, vertex.y)
-                minZ = Math.min(minZ, vertex.z)
-                maxX = Math.max(maxX, vertex.x)
-                maxY = Math.max(maxY, vertex.y)
-                maxZ = Math.max(maxZ, vertex.z)
-            }
-
-            // Calculate dimensions
-            const sizeX = Math.abs(maxX - minX).toFixed(2)
-            const sizeY = Math.abs(maxY - minY).toFixed(2)
-            const sizeZ = Math.abs(maxZ - minZ).toFixed(2)
-            
-            html += `<p><strong>Vertices:</strong> ${vertexCount.toLocaleString()}</p>`
-            html += `<p><strong>Triangles:</strong> ${Math.floor(triangleCount).toLocaleString()}</p>`
-            html += `<p><strong>Size X:</strong> ${sizeX} mm</p>`
-            html += `<p><strong>Size Y:</strong> ${sizeY} mm</p>`
-            html += `<p><strong>Size Z:</strong> ${sizeZ} mm</p>`
-
-            // Add diameter for round objects (if X and Y are very close)
-            if (Math.abs(parseFloat(sizeX) - parseFloat(sizeY)) < 0.1) {
-                html += `<p><strong>Diameter:</strong> ${sizeX} mm</p>`
-            }
-
-            // Try to get size from user strings if available
-            if (object.userData.attributes?.userStrings) {
-                for (const [key, value] of object.userData.attributes.userStrings) {
-                    if (key.toLowerCase().includes('size') || 
-                        key.toLowerCase().includes('diameter') ||
-                        key.toLowerCase().includes('width') ||
-                        key.toLowerCase().includes('height')) {
-                        html += `<p><strong>Rhino ${key}:</strong> ${value}</p>`
-                    }
-                }
-            }
-        }
-
-        // Add material properties
-        html += '<h4>Material Properties</h4>'
-        if (object.material) {
-            html += `<p><strong>Color:</strong> #${object.material.color.getHexString()}</p>`
-            html += `<p><strong>Metalness:</strong> ${object.material.metalness}</p>`
-            html += `<p><strong>Roughness:</strong> ${object.material.roughness}</p>`
-            html += `<p><strong>Opacity:</strong> ${object.material.opacity}</p>`
-        }
-
-        // Add user strings if available
-        if (object.userData.attributes?.userStrings) {
-            html += '<h4>Properties</h4>'
-            for (const [key, value] of object.userData.attributes.userStrings) {
-                if (!key.toLowerCase().includes('size') && 
-                    !key.toLowerCase().includes('diameter') &&
-                    !key.toLowerCase().includes('width') &&
-                    !key.toLowerCase().includes('height')) {
-                    html += `<p><strong>${key}:</strong> ${value}</p>`
-                }
-            }
-        }
-
-        container.innerHTML = html
-        document.body.appendChild(container)
+    return {
+        sizeX: displaySizeX,
+        sizeY: displaySizeY,
+        sizeZ,
+        isRound: lowerName.includes('round'),
+        vertexCount: object.geometry.attributes.position.count,
+        triangleCount: object.geometry.index ? 
+            Math.floor(object.geometry.index.count / 3) : 
+            Math.floor(object.geometry.attributes.position.count / 3)
     }
 }
 
 function onWindowResize() {
     const container = document.getElementById('viewer')
-    if (!container) return
+    const rect = container.getBoundingClientRect()
+    const width = rect.width
+    const height = rect.height
     
-    const containerWidth = container.clientWidth
-    const containerHeight = container.clientHeight
-    
-    camera.aspect = containerWidth / containerHeight
+    camera.aspect = width / height
     camera.updateProjectionMatrix()
-    renderer.setSize(containerWidth, containerHeight)
+    
+    renderer.setSize(width, height)
+}
+
+function onMouseClick(event) {
+    event.preventDefault()
+    
+    // Get the canvas-relative coordinates
+    const rect = renderer.domElement.getBoundingClientRect()
+    mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1
+    mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1
+
+    // Update the picking ray with the camera and mouse position
+    raycaster.setFromCamera(mouse, camera)
+
+    // Calculate objects intersecting the picking ray
+    const intersects = raycaster.intersectObjects(scene.children, true)
+
+    // Reset all materials
+    scene.traverse((child) => {
+        if (child.isMesh && child.userData.originalMaterial) {
+            child.material = child.userData.originalMaterial
+        }
+    })
+
+    // Remove existing info container
+    const existingInfo = document.getElementById('object-info')
+    if (existingInfo) {
+        existingInfo.remove()
+    }
+
+    if (intersects.length > 0) {
+        const object = intersects[0].object
+        if (object.isMesh) {
+            // Store original material if not already stored
+            if (!object.userData.originalMaterial) {
+                object.userData.originalMaterial = object.material.clone()
+            }
+            
+            // Create highlighted material
+            const highlightMaterial = object.userData.originalMaterial.clone()
+            highlightMaterial.emissive.setHex(0x666600)
+            highlightMaterial.emissiveIntensity = 0.5
+            
+            // Apply highlighted material
+            object.material = highlightMaterial
+            
+            console.log('Selected object:', object.name)
+
+            // Create info container
+            const infoContainer = document.createElement('div')
+            infoContainer.id = 'object-info'
+            infoContainer.className = 'fixed top-4 right-4 bg-white rounded-lg shadow-lg p-4 max-w-md z-50'
+            
+            let html = '<div class="space-y-4">'
+            
+            // Add name if available
+            if (object.name) {
+                html += `
+                    <div class="border-b pb-2">
+                        <h3 class="text-lg font-medium text-gray-900">Object Information</h3>
+                        <p class="text-sm text-gray-600">${object.name}</p>
+                    </div>`
+            }
+
+            // Add geometry measurements
+            if (object.geometry) {
+                html += '<div class="space-y-2">'
+                html += '<h4 class="text-md font-medium text-gray-900">Geometry Measurements</h4>'
+                
+                const dimensions = calculateObjectDimensions(object)
+                
+                html += `
+                    <div class="grid grid-cols-2 gap-2 text-sm">
+                        <div class="text-gray-600">Vertices:</div>
+                        <div class="text-gray-900">${dimensions.vertexCount.toLocaleString()}</div>
+                        
+                        <div class="text-gray-600">Triangles:</div>
+                        <div class="text-gray-900">${dimensions.triangleCount.toLocaleString()}</div>
+                        
+                        <div class="text-gray-600">Size X:</div>
+                        <div class="text-gray-900">${dimensions.sizeX} mm</div>
+                        
+                        <div class="text-gray-600">Size Y:</div>
+                        <div class="text-gray-900">${dimensions.sizeY} mm</div>
+                        
+                        <div class="text-gray-600">Size Z:</div>
+                        <div class="text-gray-900">${dimensions.sizeZ} mm</div>`
+
+                if (dimensions.isRound) {
+                    html += `
+                        <div class="text-gray-600">Diameter:</div>
+                        <div class="text-gray-900">${dimensions.sizeX} mm</div>`
+                }
+
+                html += '</div></div>'
+            }
+
+            // Add material properties
+            if (object.material) {
+                html += `
+                    <div class="space-y-2">
+                        <h4 class="text-md font-medium text-gray-900">Material Properties</h4>
+                        <div class="grid grid-cols-2 gap-2 text-sm">
+                            <div class="text-gray-600">Color:</div>
+                            <div class="text-gray-900">#${object.material.color.getHexString()}</div>
+                            
+                            <div class="text-gray-600">Metalness:</div>
+                            <div class="text-gray-900">${object.material.metalness}</div>
+                            
+                            <div class="text-gray-600">Roughness:</div>
+                            <div class="text-gray-900">${object.material.roughness}</div>
+                            
+                            <div class="text-gray-600">Opacity:</div>
+                            <div class="text-gray-900">${object.material.opacity}</div>
+                        </div>
+                    </div>`
+            }
+
+            html += '</div>'
+
+            // Add close button
+            html += `
+                <button onclick="this.parentElement.remove()" 
+                        class="absolute top-2 right-2 text-gray-400 hover:text-gray-500">
+                    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>`
+
+            infoContainer.innerHTML = html
+            document.body.appendChild(infoContainer)
+        }
+    }
 }
 
 function animate() {
