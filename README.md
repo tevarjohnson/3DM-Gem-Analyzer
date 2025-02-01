@@ -38,7 +38,7 @@ A web-based tool for analyzing and visualizing diamond measurements from 3DM fil
    ```
    Or any other local server of your choice.
 
-4. Open `http://localhost:8000/3dm-analyzer.html` in your web browser
+4. Open `http://localhost:8000` in your web browser
 
 ## Usage
 
@@ -63,7 +63,7 @@ The analyzer looks for meshes with names containing "diamond" and automatically:
 ### Project Structure
 ```
 3DM-Gem-Analyzer/
-├── 3dm-analyzer.html    # Main HTML file
+├── index.html          # Main HTML file
 ├── static/
 │   └── js/
 │       └── 3dm-analyzer.js  # Main JavaScript file
