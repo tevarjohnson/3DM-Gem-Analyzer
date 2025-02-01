@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html class="h-full bg-gray-100">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" href="data:;base64,=">
+        <title>3DM Gem Analyzer</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+        <style>
+            #loader {
+                border: 5px solid #f3f3f3;
+                border-top: 5px solid #3d3d3d;
+                border-radius: 50%;
+                width: 40px;
+                height: 40px;
+                animation: spin 1s linear infinite;
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                z-index: 20;
+            }
+
+            @keyframes spin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+            }
+
+            #viewer canvas {
+                width: 100% !important;
+                height: 100% !important;
+                border-radius: 0.5rem;
+            }
+        </style>
+    </head>
+    <body class="h-full">
+        <div class="min-h-full">
+            <div class="bg-gray-800 pb-32">
+                <header class="py-4">
+                    <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+                        <h1 class="text-3xl font-bold tracking-tight text-white">3DM Gem Analyzer</h1>
+                    </div>
+                </header>
+            </div>
+
+            <main class="-mt-32">
+                <div class="mx-auto max-w-7xl px-4 pb-12 sm:px-6 lg:px-8">
+                    <!-- File Input Card -->
+                    <div class="rounded-lg bg-white px-5 py-6 shadow sm:px-6 mb-6">
+                        <input type="file" id="fileInput" accept=".3dm" 
+                               class="block w-full text-sm text-slate-500
+                                      file:mr-4 file:py-2 file:px-4
+                                      file:rounded-full file:border-0
+                                      file:text-sm file:font-semibold
+                                      file:bg-violet-50 file:text-violet-700
+                                      hover:file:bg-violet-100">
+                    </div>
+
+                    <!-- Content Grid -->
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <!-- Model Viewer Card -->
+                        <div class="rounded-lg bg-white shadow overflow-hidden">
+                            <div class="px-5 py-4 border-b border-gray-200">
+                                <h2 class="text-lg font-medium text-gray-900">Model Preview</h2>
+                            </div>
+                            <div class="relative bg-gray-900" style="height: 500px">
+                                <div id="loader" class="hidden"></div>
+                                <div id="viewer" class="absolute inset-0"></div>
+                            </div>
+                        </div>
+
+                        <!-- Diamond Summary Card -->
+                        <div class="rounded-lg bg-white shadow overflow-hidden">
+                            <div class="px-5 py-4 border-b border-gray-200">
+                                <h2 class="text-lg font-medium text-gray-900">Diamond Summary</h2>
+                            </div>
+                            <div id="diamond-summary-container" class="p-5 max-h-[500px] overflow-y-auto">
+                                <!-- Results will be dynamically inserted here -->
+                                <div class="text-sm text-gray-500">
+                                    Upload a .3dm file to view diamond summary
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+
+        <!-- Import maps polyfill -->
+        <script async src="https://unpkg.com/es-module-shims@1.8.2/dist/es-module-shims.js"></script>
+
+        <script type="importmap">
+            {
+                "imports": {
+                    "three": "https://unpkg.com/three@0.158.0/build/three.module.js",
+                    "three/examples/jsm/controls/OrbitControls": "https://unpkg.com/three@0.158.0/examples/jsm/controls/OrbitControls.js",
+                    "three/examples/jsm/loaders/3DMLoader": "https://unpkg.com/three@0.158.0/examples/jsm/loaders/3DMLoader.js",
+                    "rhino3dm": "https://unpkg.com/rhino3dm@8.4.0/rhino3dm.module.min.js"
+                }
+            }
+        </script>
+        
+        <script type="module" src="static/js/3dm-analyzer.js"></script>
+    </body>
+</html>
