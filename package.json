@@ -1,0 +1,14 @@
+{
+  "name": "3dm-gem-analyzer",
+  "version": "1.0.0",
+  "description": "A web-based tool for analyzing and visualizing diamond measurements from 3DM files",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "three": "^0.158.0",
+    "rhino3dm": "^8.4.0",
+    "es-module-shims": "^1.8.2"
+  }
+}
