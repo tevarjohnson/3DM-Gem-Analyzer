@@ -159,20 +159,8 @@ async function handleFileSelect(event) {
                 // Add to scene
                 scene.add(object)
 
-                // Center camera on object
-                const box = new THREE.Box3().setFromObject(object)
-                const center = box.getCenter(new THREE.Vector3())
-                const size = box.getSize(new THREE.Vector3())
-                const maxDim = Math.max(size.x, size.y, size.z)
-                
-                camera.position.set(
-                    center.x + maxDim * 2,
-                    center.y + maxDim * 2,
-                    center.z + maxDim * 2
-                )
-                controls.target.copy(center)
-                camera.lookAt(center)
-                controls.update()
+                // Center camera on the loaded object
+                centerCameraOnObject(object)
 
                 // Create summary panel with delay to ensure DOM is ready
                 setTimeout(() => {
@@ -229,6 +217,25 @@ async function handleFileSelect(event) {
             `
         }
     }
+}
+
+function centerCameraOnObject(object) {
+    const box = new THREE.Box3().setFromObject(object);
+    const center = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+    
+    // Get the largest dimension to ensure the object fits in view
+    const maxDim = Math.max(size.x, size.y, size.z);
+    const fov = camera.fov * (Math.PI / 180);
+    const cameraDistance = Math.abs(maxDim / Math.sin(fov / 2) / 1.5);
+    
+    camera.position.copy(center);
+    camera.position.z += cameraDistance;
+    camera.lookAt(center);
+    
+    // Update controls target to the center of the object
+    controls.target.copy(center);
+    controls.update();
 }
 
 function createSummaryPanel(object) {
