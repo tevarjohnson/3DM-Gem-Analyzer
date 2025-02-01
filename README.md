@@ -9,6 +9,7 @@ A web-based tool for analyzing and visualizing diamond measurements from 3DM fil
 - Detailed summary of diamond sizes and counts
 - Support for various diamond shapes (round, emerald, etc.)
 - Modern, responsive user interface
+- Offline-capable after initial setup
 
 ## Technology Stack
 
@@ -16,19 +17,28 @@ A web-based tool for analyzing and visualizing diamond measurements from 3DM fil
 - Rhino3dm.js for .3dm file parsing
 - Tailwind CSS for styling
 - Pure JavaScript (No framework dependencies)
+- NPM for dependency management
 
-## Getting Started
+## Installation
 
 1. Clone the repository:
    ```bash
    git clone https://github.com/tevarjohnson/3DM-Gem-Analyzer.git
+   cd 3DM-Gem-Analyzer
    ```
 
-2. Open `3dm-analyzer.html` in a web browser
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
 
-3. Upload a .3dm file containing diamond meshes
-   - Ensure mesh names contain "diamond" for proper detection
-   - Supported shapes: round, emerald, and custom shapes
+3. Start a local server. You can use Python's built-in server:
+   ```bash
+   python -m http.server 8000
+   ```
+   Or any other local server of your choice.
+
+4. Open `http://localhost:8000/3dm-analyzer.html` in your web browser
 
 ## Usage
 
@@ -48,11 +58,35 @@ The analyzer looks for meshes with names containing "diamond" and automatically:
 - Groups similar sizes
 - Provides total count and individual measurements
 
+## Development
+
+### Project Structure
+```
+3DM-Gem-Analyzer/
+├── 3dm-analyzer.html    # Main HTML file
+├── static/
+│   └── js/
+│       └── 3dm-analyzer.js  # Main JavaScript file
+├── package.json         # NPM dependencies
+└── README.md
+```
+
+### Dependencies
+All dependencies are managed through npm:
+- three.js (^0.158.0)
+- rhino3dm (^8.4.0)
+- es-module-shims (^1.8.2)
+
+### Local Development
+1. Make changes to the HTML or JavaScript files
+2. Refresh your browser to see changes
+3. No build step required
+
 ## Requirements
 
 - Modern web browser with WebGL support
-- Internet connection (for loading required libraries)
-- .3dm files with properly named diamond meshes
+- Node.js and npm for dependency installation
+- Local server for development
 
 ## License
 
