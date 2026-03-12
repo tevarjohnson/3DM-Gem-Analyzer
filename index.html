@@ -7,26 +7,6 @@
         <title>3DM Gem Analyzer</title>
         <script src="https://cdn.tailwindcss.com"></script>
         <style>
-            #loader {
-                border: 5px solid #f3f3f3;
-                border-top: 5px solid #3d3d3d;
-                border-radius: 50%;
-                width: 40px;
-                height: 40px;
-                animation: spin 1s linear infinite;
-                position: absolute;
-                top: 50%;
-                left: 50%;
-                margin-left: -20px;
-                margin-top: -20px;
-                z-index: 20;
-            }
-
-            @keyframes spin {
-                0% { transform: rotate(0deg); }
-                100% { transform: rotate(360deg); }
-            }
-
             #viewer canvas {
                 width: 100% !important;
                 height: 100% !important;
@@ -65,22 +45,52 @@
                                 <h2 class="text-lg font-medium text-gray-900">Model Preview</h2>
                             </div>
                             <div class="relative bg-gray-900" style="height: 500px">
-                                <div id="loader" class="hidden"></div>
+                                <div id="loader" class="hidden absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-75 z-20">
+                                    <div class="w-64 bg-gray-200 rounded-full h-4 mb-4 overflow-hidden relative">
+                                      <div id="progress-bar" class="bg-violet-600 h-4 rounded-full" style="width: 0%"></div>
+                                      <div id="progress-text" class="absolute inset-0 flex items-center justify-center text-xs font-semibold text-gray-800 mix-blend-difference">0%</div>
+                                    </div>
+                                </div>
+                                <div id="camera-controls" class="absolute top-4 left-4 z-10 flex space-x-2">
+                                    <button id="btn-top" class="bg-white/80 hover:bg-white text-gray-800 text-xs font-semibold py-1 px-2 rounded shadow backdrop-blur-sm transition">Top</button>
+                                    <button id="btn-front" class="bg-white/80 hover:bg-white text-gray-800 text-xs font-semibold py-1 px-2 rounded shadow backdrop-blur-sm transition">Front</button>
+                                    <button id="btn-right" class="bg-white/80 hover:bg-white text-gray-800 text-xs font-semibold py-1 px-2 rounded shadow backdrop-blur-sm transition">Right</button>
+                                    <button id="btn-perspective" class="bg-white/80 hover:bg-white text-gray-800 text-xs font-semibold py-1 px-2 rounded shadow backdrop-blur-sm transition">Persp</button>
+                                </div>
                                 <div id="viewer" class="absolute inset-0">
                                     <!-- Three.js canvas will be inserted here -->
                                 </div>
                             </div>
                         </div>
 
-                        <!-- Diamond Summary Card -->
-                        <div class="rounded-lg bg-white shadow overflow-hidden">
-                            <div class="px-5 py-4 border-b border-gray-200">
-                                <h2 class="text-lg font-medium text-gray-900">Diamond Summary</h2>
+                        <!-- Info Column -->
+                        <div class="flex flex-col gap-6">
+                            <!-- Object Properties Card -->
+                            <div class="rounded-lg bg-white shadow overflow-hidden">
+                                <div class="px-5 py-4 border-b border-gray-200 flex justify-between items-center">
+                                    <h2 class="text-lg font-medium text-gray-900">Object Properties</h2>
+                                </div>
+                                <div id="object-properties-container" class="p-5 overflow-y-auto" style="max-height: 250px;">
+                                    <div class="text-sm text-gray-500">
+                                        Select an object in the viewer to see its properties.
+                                    </div>
+                                </div>
                             </div>
-                            <div id="diamond-summary-container" class="p-5 overflow-y-auto">
-                                <!-- Results will be dynamically inserted here -->
-                                <div class="text-sm text-gray-500">
-                                    Upload a .3dm file to view diamond summary
+
+                            <!-- Diamond Summary Card -->
+                            <div class="rounded-lg bg-white shadow overflow-hidden flex-1 flex flex-col">
+                                <div class="px-5 py-4 border-b border-gray-200 flex justify-between items-center">
+                                    <h2 class="text-lg font-medium text-gray-900">Diamond Summary</h2>
+                                    <div class="flex space-x-2">
+                                        <input type="text" id="summary-search" placeholder="Filter..." class="border border-gray-300 rounded px-2 py-1 text-sm w-24 sm:w-32 focus:outline-none focus:ring-1 focus:ring-violet-500">
+                                        <button id="btn-export-csv" class="bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold py-1 px-3 rounded shadow transition">Export CSV</button>
+                                    </div>
+                                </div>
+                                <div id="diamond-summary-container" class="p-5 overflow-y-auto flex-1" style="max-height: 400px;">
+                                    <!-- Results will be dynamically inserted here -->
+                                    <div class="text-sm text-gray-500">
+                                        Upload a .3dm file to view diamond summary
+                                    </div>
                                 </div>
                             </div>
                         </div>

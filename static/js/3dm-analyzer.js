@@ -77,7 +77,51 @@ async function init() {
     document.getElementById('fileInput').addEventListener('change', handleFileSelect)
     renderer.domElement.addEventListener('click', onMouseClick, false)
 
+    // Camera controls
+    document.getElementById('btn-top').addEventListener('click', () => setCameraView('top'));
+    document.getElementById('btn-front').addEventListener('click', () => setCameraView('front'));
+    document.getElementById('btn-right').addEventListener('click', () => setCameraView('right'));
+    document.getElementById('btn-perspective').addEventListener('click', () => setCameraView('perspective'));
+
     animate()
+}
+
+function setCameraView(viewType) {
+    if (!scene || scene.children.length === 0) return;
+
+    // Find the main object to frame
+    const object = scene.children.find(child => child.type === 'Group' || child.type === 'Object3D') || scene;
+    const box = new THREE.Box3().setFromObject(object);
+    const center = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+
+    const maxDim = Math.max(size.x, size.y, size.z);
+    const fov = camera.fov * (Math.PI / 180);
+    const cameraDistance = Math.abs(maxDim / Math.sin(fov / 2) / 1.5);
+
+    controls.target.copy(center);
+
+    switch(viewType) {
+        case 'top':
+            camera.position.set(center.x, center.y, center.z + cameraDistance);
+            camera.up.set(0, 1, 0);
+            break;
+        case 'front':
+            camera.position.set(center.x, center.y - cameraDistance, center.z);
+            camera.up.set(0, 0, 1);
+            break;
+        case 'right':
+            camera.position.set(center.x + cameraDistance, center.y, center.z);
+            camera.up.set(0, 0, 1);
+            break;
+        case 'perspective':
+            camera.position.set(center.x + cameraDistance * 0.7, center.y - cameraDistance * 0.7, center.z + cameraDistance * 0.7);
+            camera.up.set(0, 0, 1);
+            break;
+    }
+
+    camera.lookAt(center);
+    controls.update();
 }
 
 function setupLights() {
@@ -90,14 +134,27 @@ function setupLights() {
     scene.add(dirLight)
 }
 
+// Store the latest diamonds data globally so we can export/filter it
+let currentDiamondsMap = new Map();
+
 // Handle file selection
 async function handleFileSelect(event) {
     const file = event.target.files[0]
     if (!file) return
 
+    // Reset current map
+    currentDiamondsMap.clear();
+
     // Show loader
     const loader = document.getElementById('loader')
-    if (loader) loader.style.display = 'block'
+    const progressBar = document.getElementById('progress-bar')
+    const progressText = document.getElementById('progress-text')
+
+    if (loader) {
+        loader.classList.remove('hidden')
+        if (progressBar) progressBar.style.width = '0%'
+        if (progressText) progressText.textContent = '0%'
+    }
 
     // Get container element
     const container = document.getElementById('diamond-summary-container')
@@ -124,7 +181,7 @@ async function handleFileSelect(event) {
         loader3dm.load(url, 
             function(object) {
                 // Hide loader
-                if (loader) loader.style.display = 'none'
+                if (loader) loader.classList.add('hidden')
 
                 // Clear existing objects
                 while(scene.children.length > 0){ 
@@ -188,10 +245,12 @@ async function handleFileSelect(event) {
             progress => {
                 const percent = (progress.loaded / progress.total * 100)
                 console.log(percent.toFixed(2) + '% loaded')
+                if (progressBar) progressBar.style.width = `${percent}%`
+                if (progressText) progressText.textContent = `${percent.toFixed(0)}%`
             },
             error => {
                 console.error('Error loading 3DM:', error)
-                if (loader) loader.style.display = 'none'
+                if (loader) loader.classList.add('hidden')
                 
                 const container = document.getElementById('diamond-summary-container')
                 if (container) {
@@ -206,7 +265,7 @@ async function handleFileSelect(event) {
 
     } catch (error) {
         console.error('Error processing file:', error)
-        if (loader) loader.style.display = 'none'
+        if (loader) loader.classList.add('hidden')
         
         const container = document.getElementById('diamond-summary-container')
         if (container) {
@@ -266,6 +325,12 @@ function createSummaryPanel(object) {
 
     object.traverse(child => {
         if (child.isMesh && child.name.toLowerCase().includes('diamond')) {
+            // Check for valid geometry before adding to summary
+            if (!child.geometry || !child.geometry.attributes || !child.geometry.attributes.position) {
+                console.warn('Diamond mesh has no valid geometry:', child.name);
+                return;
+            }
+
             console.log('Found diamond mesh:', child.name);
             diamondCount++;
             
@@ -296,6 +361,8 @@ function createSummaryPanel(object) {
         return;
     }
 
+    currentDiamondsMap = diamonds;
+
     // Create HTML content
     let html = `
         <div class="mb-6">
@@ -315,13 +382,14 @@ function createSummaryPanel(object) {
     });
 
     // Create grid layout for diamond groups
-    html += '<div class="space-y-4">';
+    html += '<div class="space-y-4 diamond-list">';
 
     for (const sizeKey of sortedSizes) {
         const entry = diamonds.get(sizeKey)
+        const idStr = `diamond-group-${sizeKey.replace(/[^a-zA-Z0-9]/g, '-')}`
         
         html += `
-            <div class="bg-gray-50 rounded-lg p-4 border border-gray-200">
+            <div id="${idStr}" class="diamond-group-item bg-gray-50 rounded-lg p-4 border border-gray-200 cursor-pointer transition-colors hover:bg-gray-100" data-size-key="${sizeKey}">
                 <div class="flex justify-between items-center mb-3">
                     <h3 class="text-gray-900 font-medium">Size: ${sizeKey} mm</h3>
                     <span class="bg-violet-100 text-violet-800 px-2 py-1 rounded text-sm font-medium">
@@ -343,33 +411,115 @@ function createSummaryPanel(object) {
     console.log('Updating container with HTML');
     // Update the container content
     container.innerHTML = html;
+
+    // Add hover event listeners for highlighting
+    const groupItems = container.querySelectorAll('.diamond-group-item');
+    groupItems.forEach(item => {
+        item.addEventListener('mouseenter', () => {
+            const sizeKey = item.getAttribute('data-size-key');
+            highlightDiamondGroup(sizeKey);
+        });
+        item.addEventListener('mouseleave', () => {
+            clearHighlighting();
+        });
+    });
+
     console.log('Summary panel created successfully');
+}
+
+// Global listener setup for export and filtering
+document.getElementById('btn-export-csv').addEventListener('click', () => {
+    if (currentDiamondsMap.size === 0) {
+        alert("No diamond data to export.");
+        return;
+    }
+
+    let csvContent = "data:text/csv;charset=utf-8,";
+    // Header
+    csvContent += "Size (mm),Count,Height (mm),Shape\n";
+
+    Array.from(currentDiamondsMap.entries()).forEach(([sizeKey, entry]) => {
+        csvContent += `"${sizeKey}",${entry.count},${entry.sizeZ},"${entry.shape || ''}"\n`;
+    });
+
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", "diamond_summary.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+});
+
+document.getElementById('summary-search').addEventListener('input', (event) => {
+    const query = event.target.value.toLowerCase();
+    const items = document.querySelectorAll('.diamond-group-item');
+    items.forEach(item => {
+        const text = item.innerText.toLowerCase();
+        if (text.includes(query)) {
+            item.style.display = 'block';
+        } else {
+            item.style.display = 'none';
+        }
+    });
+});
+
+function highlightDiamondGroup(sizeKey) {
+    scene.traverse((child) => {
+        if (child.isMesh && child.name.toLowerCase().includes('diamond')) {
+            const dimensions = calculateObjectDimensions(child);
+            const childSizeKey = `${dimensions.sizeX} x ${dimensions.sizeY}`;
+
+            if (childSizeKey === sizeKey) {
+                if (!child.userData.originalMaterial) {
+                    child.userData.originalMaterial = child.material.clone();
+                }
+                const highlightMaterial = child.userData.originalMaterial.clone();
+                highlightMaterial.emissive.setHex(0x0066ff);
+                highlightMaterial.emissiveIntensity = 0.5;
+                child.material = highlightMaterial;
+            } else {
+                if (child.userData.originalMaterial) {
+                    child.material = child.userData.originalMaterial;
+                }
+            }
+        }
+    });
+}
+
+function clearHighlighting() {
+    scene.traverse((child) => {
+        if (child.isMesh && child.userData.originalMaterial) {
+            child.material = child.userData.originalMaterial;
+        }
+    });
 }
 
 // Calculate dimensions for an object based on its geometry and type
 function calculateObjectDimensions(object) {
-    const positions = object.geometry.attributes.position.array
-    let minX = Infinity, minY = Infinity, minZ = Infinity
-    let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity
-
-    // Calculate bounds from vertices
-    for (let i = 0; i < positions.length; i += 3) {
-        const vertex = new THREE.Vector3(positions[i], positions[i + 1], positions[i + 2])
-        // Apply object's transformation
-        vertex.applyMatrix4(object.matrixWorld)
-        
-        minX = Math.min(minX, vertex.x)
-        minY = Math.min(minY, vertex.y)
-        minZ = Math.min(minZ, vertex.z)
-        maxX = Math.max(maxX, vertex.x)
-        maxY = Math.max(maxY, vertex.y)
-        maxZ = Math.max(maxZ, vertex.z)
+    if (!object || !object.geometry || !object.geometry.attributes || !object.geometry.attributes.position) {
+        return {
+            sizeX: '0.00',
+            sizeY: '0.00',
+            sizeZ: '0.00',
+            isRound: false,
+            vertexCount: 0,
+            triangleCount: 0
+        }
     }
 
-    // Calculate raw dimensions
-    const sizeX = Math.abs(maxX - minX).toFixed(2)
-    const sizeY = Math.abs(maxY - minY).toFixed(2)
-    const sizeZ = Math.abs(maxZ - minZ).toFixed(2)
+    object.geometry.computeBoundingBox();
+    const bbox = object.geometry.boundingBox;
+
+    // Get the global scale of the object
+    const scale = new THREE.Vector3();
+    object.matrixWorld.decompose(new THREE.Vector3(), new THREE.Quaternion(), scale);
+
+    // Calculate raw dimensions using local bounding box and global scale
+    // This provides OBB-like measurements regardless of object rotation
+    const sizeX = (Math.abs(bbox.max.x - bbox.min.x) * scale.x).toFixed(2)
+    const sizeY = (Math.abs(bbox.max.y - bbox.min.y) * scale.y).toFixed(2)
+    const sizeZ = (Math.abs(bbox.max.z - bbox.min.z) * scale.z).toFixed(2)
     
     let displaySizeX = sizeX
     let displaySizeY = sizeY
@@ -431,11 +581,7 @@ function onMouseClick(event) {
         }
     })
 
-    // Remove existing info container
-    const existingInfo = document.getElementById('object-info')
-    if (existingInfo) {
-        existingInfo.remove()
-    }
+    const propertiesContainer = document.getElementById('object-properties-container')
 
     if (intersects.length > 0) {
         const object = intersects[0].object
@@ -455,10 +601,7 @@ function onMouseClick(event) {
             
             console.log('Selected object:', object.name)
 
-            // Create info container
-            const infoContainer = document.createElement('div')
-            infoContainer.id = 'object-info'
-            infoContainer.className = 'fixed top-4 right-4 bg-white rounded-lg shadow-lg p-4 max-w-md z-50'
+            if (!propertiesContainer) return;
             
             let html = '<div class="space-y-4">'
             
@@ -466,39 +609,38 @@ function onMouseClick(event) {
             if (object.name) {
                 html += `
                     <div class="border-b pb-2">
-                        <h3 class="text-lg font-medium text-gray-900">Object Information</h3>
-                        <p class="text-sm text-gray-600">${object.name}</p>
+                        <p class="text-sm font-semibold text-gray-900 break-words">${object.name}</p>
                     </div>`
             }
 
             // Add geometry measurements
-            if (object.geometry) {
+            if (object.geometry && object.geometry.attributes && object.geometry.attributes.position) {
                 html += '<div class="space-y-2">'
-                html += '<h4 class="text-md font-medium text-gray-900">Geometry Measurements</h4>'
+                html += '<h4 class="text-xs font-semibold uppercase tracking-wide text-gray-500">Geometry</h4>'
                 
                 const dimensions = calculateObjectDimensions(object)
                 
                 html += `
-                    <div class="grid grid-cols-2 gap-2 text-sm">
-                        <div class="text-gray-600">Vertices:</div>
-                        <div class="text-gray-900">${dimensions.vertexCount.toLocaleString()}</div>
+                    <div class="grid grid-cols-2 gap-x-2 gap-y-1 text-sm">
+                        <div class="text-gray-500">Vertices:</div>
+                        <div class="text-gray-900 text-right">${dimensions.vertexCount.toLocaleString()}</div>
                         
-                        <div class="text-gray-600">Triangles:</div>
-                        <div class="text-gray-900">${dimensions.triangleCount.toLocaleString()}</div>
+                        <div class="text-gray-500">Triangles:</div>
+                        <div class="text-gray-900 text-right">${dimensions.triangleCount.toLocaleString()}</div>
                         
-                        <div class="text-gray-600">Size X:</div>
-                        <div class="text-gray-900">${dimensions.sizeX} mm</div>
+                        <div class="text-gray-500">Size X:</div>
+                        <div class="text-gray-900 text-right">${dimensions.sizeX} mm</div>
                         
-                        <div class="text-gray-600">Size Y:</div>
-                        <div class="text-gray-900">${dimensions.sizeY} mm</div>
+                        <div class="text-gray-500">Size Y:</div>
+                        <div class="text-gray-900 text-right">${dimensions.sizeY} mm</div>
                         
-                        <div class="text-gray-600">Size Z:</div>
-                        <div class="text-gray-900">${dimensions.sizeZ} mm</div>`
+                        <div class="text-gray-500">Size Z:</div>
+                        <div class="text-gray-900 text-right">${dimensions.sizeZ} mm</div>`
 
                 if (dimensions.isRound) {
                     html += `
-                        <div class="text-gray-600">Diameter:</div>
-                        <div class="text-gray-900">${dimensions.sizeX} mm</div>`
+                        <div class="text-gray-500">Diameter:</div>
+                        <div class="text-gray-900 text-right">${dimensions.sizeX} mm</div>`
                 }
 
                 html += '</div></div>'
@@ -507,37 +649,34 @@ function onMouseClick(event) {
             // Add material properties
             if (object.material) {
                 html += `
-                    <div class="space-y-2">
-                        <h4 class="text-md font-medium text-gray-900">Material Properties</h4>
-                        <div class="grid grid-cols-2 gap-2 text-sm">
-                            <div class="text-gray-600">Color:</div>
-                            <div class="text-gray-900">#${object.material.color.getHexString()}</div>
+                    <div class="space-y-2 mt-4">
+                        <h4 class="text-xs font-semibold uppercase tracking-wide text-gray-500">Material</h4>
+                        <div class="grid grid-cols-2 gap-x-2 gap-y-1 text-sm">
+                            <div class="text-gray-500">Color:</div>
+                            <div class="text-gray-900 text-right">#${object.material.color.getHexString()}</div>
                             
-                            <div class="text-gray-600">Metalness:</div>
-                            <div class="text-gray-900">${object.material.metalness}</div>
+                            <div class="text-gray-500">Metalness:</div>
+                            <div class="text-gray-900 text-right">${object.material.metalness}</div>
                             
-                            <div class="text-gray-600">Roughness:</div>
-                            <div class="text-gray-900">${object.material.roughness}</div>
+                            <div class="text-gray-500">Roughness:</div>
+                            <div class="text-gray-900 text-right">${object.material.roughness}</div>
                             
-                            <div class="text-gray-600">Opacity:</div>
-                            <div class="text-gray-900">${object.material.opacity}</div>
+                            <div class="text-gray-500">Opacity:</div>
+                            <div class="text-gray-900 text-right">${object.material.opacity}</div>
                         </div>
                     </div>`
             }
 
             html += '</div>'
-
-            // Add close button
-            html += `
-                <button onclick="this.parentElement.remove()" 
-                        class="absolute top-2 right-2 text-gray-400 hover:text-gray-500">
-                    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                    </svg>
-                </button>`
-
-            infoContainer.innerHTML = html
-            document.body.appendChild(infoContainer)
+            propertiesContainer.innerHTML = html
+        }
+    } else {
+        if (propertiesContainer) {
+            propertiesContainer.innerHTML = `
+                <div class="text-sm text-gray-500">
+                    Select an object in the viewer to see its properties.
+                </div>
+            `;
         }
     }
 }
